@@ -1,0 +1,49 @@
+一、错误的地方
+	1、没有创建上报数据记录中间表。导致后期统计、比对已上报数据没法比较。--以后实现功能前多想想是否需要中间表来保存记录数据，以备后期统计使用。
+	2、上传逻辑不应该写到assets项目,导致还要把上传的文件还需要通过二进制方式从assets-manager再次传到assets.
+		这一步可能会由于文件太大，无法传输而报错。--上传、下载逻辑本来就应该写在后台管理项目中，而不是服务层项目中。正确的方式应该通过服务层接口
+		查询出数据集合列表，然后在后台管理项目中生成文件并上传，而不会把生成文件的逻辑放到服务层项目中。下载也是同理。
+	3、查询合同要素等数据时没有对数据库进行分页查询，导致当数据量过大时，会长期占用数据库连接，或者时间太长使数据库连接断开，查询的数据不完整。
+	   --凡是条件查询语句都应该考虑数据量太大的问题，都应该考虑使用分页查询，这一点切记。
+	4、sql语句中对字段使用to_char(),然后作为where条件。--sql语句中使用函数本身就影响效率，如果对有索引的字段使用函数，索引也会失效，
+	   更会大大的影响效率，亲身实验影响真的很大。所以后遇到时间比较使用to_date()大于小于的方式。这一点切记。
+
+二、使用sql脚本整理历史存量数据遇到的问题
+	1、oralce中对number字段使用字符串操作如to_char()或||字符串拼接，会使0.21前面的0丢失。--可使用to_char(0.21,'fm9999999990.00');
+	2、oralce使用insert into select 的方式插入数据很慢。--使用下面的方式，效率很不错
+	   --1、查询数据并插入
+		DECLARE 
+		BEGIN
+		for tp in (
+		  select ip.subject_no subject_no,ip.order_no order_no,ip.term term,ip.suppler_no project_no
+		  ,case ip.status when 2 then '06' else null end contract_status,to_char(ip.modify_time,'yyyy-MM-dd hh24:mi:ss') change_date,to_char(ip.modify_time,'yyyy-MM-dd') file_date
+		  from T_AST_SUBJECT_INVEST_REPAYPLAN ip 
+		  left join T_AST_SUBJECT_INVEST_ORDER o on ip.order_no=o.order_no
+		  WHERE ip.status!=0 AND o.trans_from_order IS NULL--只查非转让的订单
+		  AND ip.modify_time>=to_date('2018-08-01 00:00:00','yyyy-mm-dd hh24:mi:ss') AND ip.modify_time<to_date('2018-10-16 00:00:00','yyyy-mm-dd hh24:mi:ss')
+		)loop
+
+		insert into T_NF_PRD_CONTRACT_STATE(id,subject_no,order_no,term,project_no,contract_status,change_date,file_date,create_time,remark)
+		 values(SEQ_NF_PRD_CONTRACT_STATE.NEXTVAL,tp.subject_no,tp.order_no,tp.term,tp.project_no,tp.contract_status,tp.change_date,tp.file_date,sysdate,'1');
+		 
+		end loop;
+		end;
+	3、当数据量很大时，一些每条记录都有的共同的不变的字段(如描述性的字段)，这些字段尽量不要直接加到每条记录上，这样会大量占用数据库内存,导出文件也会很慢。--可以单独建立一个字典表用来
+		保存这些字段，所有的字段只需引用它所对应的编号即可。
+	4、
+	
+三、学到的东西
+	1、使用sql组装json格式数据(wm_concat()函数)：
+		select order_no,'{"plan":['|| to_char(plan) ||']}' return_plan,tp.file_date from (
+		select max(order_no) order_no,wm_concat('{"date":"'||to_char(t.repay_day,'yyyy-MM-dd')||'","principal":"'||to_char(t.principal,'fm9999999990.00')||'","interest":"'||to_char(t.interest,'fm9999999990.00')||'"}') plan
+		from loan.t_ast_subject_invest_repayplan t  WHERE order_no=tp.order_no);
+	2、数据库中删除表的数据，表空间占用的内存是不会变小的。除非把表drop掉，重新创建。这就是说表空间的内存是不会自动缩小的，就想一个水桶，你即便倒出半桶水，它的容量还是这么大。这和磁盘存储分配是一样的，磁针顺序读取不会回退，
+		如果把一个表的表空间所占内存缩小了，就相当于磁针倒退，这样所有表的表空间内存位置都会发生变化，如果这样相当于每次变动内存都需要重新分配，那就太费时费力了。
+	3、当数据量很大时，索引真的都有用，所以以后建表都要考虑索引，还有就是where条件里尽最大可能的不对表字段使用函数，这样会降低查询效率并使字段索引失效。
+	4、notepad++真的挺好用，几个G的文件都可以打开，还有许多好用的功能。以后不管去哪都要下载一个最新版本的。
+	
+四、总结
+	这是我工作以来遇到的最大的数据量，很多以前在少的数据量那里没问题的地方，在大量的数据面前都会有这样或那样的问题。这次处理数据的过程却是费时又费力，可喜的是最后也算是圆满完成任务。
+	为以后再次处理大量数据积累了宝贵的经验。通过这件事，让我意识到由于自己知识面的不足，很多高效的方法，可能你听都没听过，在自己的认知范围内也是想不到的。所以做事不能光埋头自己想，
+	可以先去咨询同事有没有遇到类似的问题，或者去网上查查是否有类似问题的解决方案。尽量找到一个高效的方法后再着手工作，不要根据自己现有的想法立马去着手开干，你的这个想法很可能是不足的，
+	这样就会导致做的多错的更多，完全是白费功夫，这样就大大的降低效率了。	
