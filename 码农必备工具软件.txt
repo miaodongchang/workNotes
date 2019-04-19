@@ -1,0 +1,14 @@
+jdk1.8
+maven3.5 配置本地仓库，conf/setting.xml配置私服地址
+tomcat8
+idea2018
+idea插件：maven helper(依赖整理)等，百度搜索idea那些好用的插件。
+数据库：plsql(下载instantclient_11_2，找同事获得\NETWORK\ADMIN\tnsnames.ora并配置在plsql-tools-preferences-oracle-collection),mysql下载安装,选择用的多且较新版本。
+git
+xshell
+jd-gui 反编辑工具
+notepad++ 最新版本
+EditPlus 看情况，需要就下载
+chrome浏览器(lantern交费翻墙，看情况)
+jmeter 测高并发
+postman 测试接口
